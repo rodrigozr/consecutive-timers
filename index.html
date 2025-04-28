@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consecutive Timers</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            transition: background-color 1s ease;
+        }
+        #timer-display {
+            font-size: 48px;
+            font-weight: bold;
+            text-align: center;
+        }
+        #cycle-display {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="timer-display">Ready to start</div>
+    <div id="cycle-display"></div>
+
+    <script>
+        // Default configuration
+        let timers = [
+            {name: 'Inhale', seconds: 12, color: '#B7B1F2'},
+            {name: 'Hold', seconds: 48, color: '#FFDCCC'},
+            {name: 'Exhale', seconds: 24, color: '#FBF3B9'}
+        ];
+        let cycles = 20;
+
+        // Parse configuration from URL hash if present
+        function parseConfig() {
+            if (window.location.hash) {
+                try {
+                    const params = new URLSearchParams(window.location.hash.slice(1));
+                    
+                    // Parse cycles if present
+                    if (params.has('cycles')) {
+                        const parsedCycles = parseInt(params.get('cycles'));
+                        if (!isNaN(parsedCycles) && parsedCycles > 0) {
+                            cycles = parsedCycles;
+                        }
+                    }
+
+                    // Parse timers if present
+                    if (params.has('timers')) {
+                        const timerStr = params.get('timers');
+                        const parsedTimers = timerStr.split(';').map(timer => {
+                            const [name, seconds, color] = timer.split(':');
+                            return {
+                                name: decodeURIComponent(name),
+                                seconds: parseInt(seconds),
+                                color: color.startsWith('#') ? color : '#' + color
+                            };
+                        });
+
+                        // Validate parsed timers
+                        if (parsedTimers.every(t => 
+                            t.name && 
+                            !isNaN(t.seconds) && 
+                            t.seconds > 0 && 
+                            /^#[0-9A-Fa-f]{6}$/.test(t.color)
+                        )) {
+                            timers = parsedTimers;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing URL configuration:', e);
+                }
+            }
+
+            // Log the current configuration
+            console.log('Current configuration:', { cycles, timers });
+        }
+
+        let currentTimerIndex = 0;
+        let currentCycle = 1;
+        let remainingSeconds = 0;
+        let intervalId;
+        let audioContext;
+
+        const timerDisplay = document.getElementById('timer-display');
+        const cycleDisplay = document.getElementById('cycle-display');
+
+        function playBeep() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        function startTimers() {
+            if (currentCycle > cycles) {
+                timerDisplay.textContent = 'Finished!';
+                cycleDisplay.textContent = '';
+                document.body.style.backgroundColor = '#f0f0f0';
+                playBeep();
+                return;
+            }
+
+            const currentTimer = timers[currentTimerIndex];
+            remainingSeconds = currentTimer.seconds;
+            document.body.style.backgroundColor = currentTimer.color;
+
+            updateDisplay();
+
+            intervalId = setInterval(() => {
+                remainingSeconds--;
+
+                if (remainingSeconds <= 0) {
+                    clearInterval(intervalId);
+                    playBeep();
+                    currentTimerIndex = (currentTimerIndex + 1) % timers.length;
+
+                    if (currentTimerIndex === 0) {
+                        currentCycle++;
+                    }
+
+                    setTimeout(startTimers, 1000);
+                } else {
+                    updateDisplay();
+                }
+            }, 1000);
+        }
+
+        function updateDisplay() {
+            const currentTimer = timers[currentTimerIndex];
+            timerDisplay.textContent = `${currentTimer.name}: ${remainingSeconds}`;
+            cycleDisplay.textContent = `Cycle ${currentCycle} of ${cycles}`;
+        }
+
+        // Parse configuration and set up event listener
+        parseConfig();
+        document.addEventListener('click', function initialClick() {
+            document.removeEventListener('click', initialClick);
+            setTimeout(startTimers, 500);
+        });
+
+        timerDisplay.textContent = 'Click anywhere to start';
+    </script>
+</body>
+</html>
